@@ -100,5 +100,23 @@ export const commands = [
 
   new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Verify your identity to access the server')
+    .setDescription('Verify your identity to access the server'),
+
+  new SlashCommandBuilder()
+    .setName('add-role')
+    .setDescription('Add a role to a member')
+    .addUserOption(option => option.setName('user').setDescription('User to add role to').setRequired(true))
+    .addRoleOption(option => option.setName('role').setDescription('Role to add').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('remove-role')
+    .setDescription('Remove a role from a member')
+    .addUserOption(option => option.setName('user').setDescription('User to remove role from').setRequired(true))
+    .addRoleOption(option => option.setName('role').setDescription('Role to remove').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('delete-msg')
+    .setDescription('Delete messages from a channel')
+    .addChannelOption(option => option.setName('channel').setDescription('Channel to delete from').setRequired(true))
+    .addIntegerOption(option => option.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true))
 ];

@@ -302,18 +302,21 @@ async function handleDemote(interaction) {
 
     const member = await interaction.guild.members.fetch(target.id);
     
-    const oldRankRole = member.roles.cache
+    // Find and remove the old rank role (highest position role that's not @everyone)
+    const rankRoles = member.roles.cache
       .filter(r => r.name !== '@everyone')
-      .sort((a, b) => b.position - a.position)
-      .first();
+      .sort((a, b) => b.position - a.position);
     
-    if (oldRankRole) {
+    let oldRankRole = null;
+    if (rankRoles.size > 0) {
+      oldRankRole = rankRoles.first();
       await member.roles.remove(oldRankRole);
     }
     
+    // Add new rank role
     await member.roles.add(role);
     await updateUserRank(target.id, newRank);
-    await logAction('DEMOTE', interaction.user.id, target.id, `Demoted to ${newRank}`);
+    await logAction('DEMOTE', interaction.user.id, target.id, `Demoted from ${oldRankRole ? oldRankRole.name : 'Unknown'} to ${newRank}`);
     
     const logChannel = client.channels.cache.get(DISCIPLINE_LOGS_CHANNEL);
     if (logChannel) {
@@ -330,7 +333,7 @@ async function handleDemote(interaction) {
       await logChannel.send({ embeds: [embed] });
     }
     
-    await interaction.editReply({ content: `⬇️ **${target.username}** has been demoted to **${newRank}**!` });
+    await interaction.editReply({ content: `⬇️ **${target.username}** has been demoted from **${oldRankRole ? oldRankRole.name : 'Unknown'}** to **${newRank}**!` });
   } catch (error) {
     console.error('Demote error:', error);
     if (interaction.deferred) {
@@ -673,6 +676,141 @@ async function handleSetRoleCount(interaction) {
   }, 100);
 }
 
+async function handleAddRole(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+  setTimeout(async () => {
+  
+  try {
+    if (!interaction.member.permissions.has('ManageRoles')) {
+      return await interaction.editReply({ content: '❌ You don\'t have permission!' });
+    }
+
+    const target = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+
+    const member = await interaction.guild.members.fetch(target.id);
+    
+    if (member.roles.cache.has(role.id)) {
+      return await interaction.editReply({ content: `❌ **${target.username}** already has **${role.name}**!` });
+    }
+    
+    await member.roles.add(role);
+    await logAction('ADD_ROLE', interaction.user.id, target.id, `Added role: ${role.name}`);
+    
+    const logChannel = client.channels.cache.get(BOTS_LOGS_CHANNEL);
+    if (logChannel) {
+      const embed = new EmbedBuilder()
+        .setColor('#00FF00')
+        .setTitle('✅ Role Added')
+        .addFields(
+          { name: 'User', value: `${target.username} (${target.id})`, inline: true },
+          { name: 'Role', value: role.name, inline: true },
+          { name: 'Added By', value: `${interaction.user.username}`, inline: true }
+        )
+        .setTimestamp();
+      await logChannel.send({ embeds: [embed] });
+    }
+    
+    await interaction.editReply({ content: `✅ **${role.name}** added to **${target.username}**!` });
+  } catch (error) {
+    console.error('Add role error:', error);
+    if (interaction.deferred) {
+      await interaction.editReply({ content: '❌ Failed to add role!' });
+    }
+  }
+  }, 100);
+}
+
+async function handleRemoveRole(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+  setTimeout(async () => {
+  
+  try {
+    if (!interaction.member.permissions.has('ManageRoles')) {
+      return await interaction.editReply({ content: '❌ You don\'t have permission!' });
+    }
+
+    const target = interaction.options.getUser('user');
+    const role = interaction.options.getRole('role');
+
+    const member = await interaction.guild.members.fetch(target.id);
+    
+    if (!member.roles.cache.has(role.id)) {
+      return await interaction.editReply({ content: `❌ **${target.username}** doesn\'t have **${role.name}**!` });
+    }
+    
+    await member.roles.remove(role);
+    await logAction('REMOVE_ROLE', interaction.user.id, target.id, `Removed role: ${role.name}`);
+    
+    const logChannel = client.channels.cache.get(BOTS_LOGS_CHANNEL);
+    if (logChannel) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Role Removed')
+        .addFields(
+          { name: 'User', value: `${target.username} (${target.id})`, inline: true },
+          { name: 'Role', value: role.name, inline: true },
+          { name: 'Removed By', value: `${interaction.user.username}`, inline: true }
+        )
+        .setTimestamp();
+      await logChannel.send({ embeds: [embed] });
+    }
+    
+    await interaction.editReply({ content: `✅ **${role.name}** removed from **${target.username}**!` });
+  } catch (error) {
+    console.error('Remove role error:', error);
+    if (interaction.deferred) {
+      await interaction.editReply({ content: '❌ Failed to remove role!' });
+    }
+  }
+  }, 100);
+}
+
+async function handleDeleteMsg(interaction) {
+  await interaction.deferReply({ ephemeral: false });
+  setTimeout(async () => {
+  
+  try {
+    if (!interaction.member.permissions.has('ManageMessages')) {
+      return await interaction.editReply({ content: '❌ You don\'t have permission!' });
+    }
+
+    const channel = interaction.options.getChannel('channel');
+    let amount = interaction.options.getInteger('amount');
+
+    if (amount < 1 || amount > 100) {
+      return await interaction.editReply({ content: '❌ Amount must be between 1 and 100!' });
+    }
+
+    const messages = await channel.messages.fetch({ limit: amount });
+    await channel.bulkDelete(messages);
+    
+    await logAction('DELETE_MSG', interaction.user.id, interaction.guildId, `Deleted ${amount} messages from ${channel.name}`);
+    
+    const logChannel = client.channels.cache.get(BOTS_LOGS_CHANNEL);
+    if (logChannel) {
+      const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🗑️ Messages Deleted')
+        .addFields(
+          { name: 'Channel', value: `${channel.name}`, inline: true },
+          { name: 'Amount', value: amount.toString(), inline: true },
+          { name: 'Deleted By', value: `${interaction.user.username}`, inline: true }
+        )
+        .setTimestamp();
+      await logChannel.send({ embeds: [embed] });
+    }
+    
+    await interaction.editReply({ content: `✅ **${amount}** messages deleted from **${channel.name}**!` });
+  } catch (error) {
+    console.error('Delete messages error:', error);
+    if (interaction.deferred) {
+      await interaction.editReply({ content: '❌ Failed to delete messages!' });
+    }
+  }
+  }, 100);
+}
+
 // ===== EVENT LISTENERS =====
 
 client.on('ready', async () => {
@@ -765,6 +903,9 @@ client.on('interactionCreate', async (interaction) => {
         case 'set-role-count': await handleSetRoleCount(interaction); break;
         case 'logs': await handleLogs(interaction); break;
         case 'verify': await handleVerify(interaction); break;
+        case 'add-role': await handleAddRole(interaction); break;
+        case 'remove-role': await handleRemoveRole(interaction); break;
+        case 'delete-msg': await handleDeleteMsg(interaction); break;
         default: await interaction.reply({ content: '❌ Unknown command!', ephemeral: true });
       }
     } catch (error) {
